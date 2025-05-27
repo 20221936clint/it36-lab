@@ -3,16 +3,15 @@ import {
   IonAvatar,
   IonButton,
   IonContent, 
-  IonIcon, 
   IonInput, 
   IonInputPasswordToggle,  
   IonPage,  
   IonToast,  
   useIonRouter
 } from '@ionic/react';
-import { logoIonic } from 'ionicons/icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../utils/supabaseClients';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 const AlertBox: React.FC<{ message: string; isOpen: boolean; onClose: () => void }> = ({ message, isOpen, onClose }) => {
   return (
@@ -34,7 +33,9 @@ const Login: React.FC = () => {
   const [showAlert, setShowAlert] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
-  
+  // Ref for ReCAPTCHA component
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
@@ -161,65 +162,95 @@ const Login: React.FC = () => {
       document.head.removeChild(style);
     };
   }, []);
-  const doLogin = async () => {
+
+  // Called after reCAPTCHA challenge is completed
+  const onReCAPTCHAChange = async (token: string | null) => {
+    if (!token) {
+      setAlertMessage('Please complete the reCAPTCHA.');
+      setShowAlert(true);
+      return;
+    }
+
+    // After successful reCAPTCHA, try login
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setAlertMessage(error.message);
       setShowAlert(true);
+      recaptchaRef.current?.reset(); // reset reCAPTCHA on error so user can retry
       return;
     }
 
-    setShowToast(true); 
+    setShowToast(true);
     setTimeout(() => {
       navigation.push('/it36-lab/app', 'forward', 'replace');
-    }, 300);
+    }, 1500);
   };
-  
+
+  // When user clicks login, execute reCAPTCHA first
+  const handleLoginClick = () => {
+    if (!email || !password) {
+      setAlertMessage('Please enter both email and password.');
+      setShowAlert(true);
+      return;
+    }
+
+    recaptchaRef.current?.execute();
+  };
+
   return (
     <IonPage>
       <IonContent className='ion-padding'>
         <div style={{
           display: 'flex',
-          color:'aqua',
-          flexDirection:'column',
+          color: 'aqua',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          marginTop:'25%'
+          marginTop: '25%'
         }}>
-         <IonAvatar className="login-avatar">
-          <img
-            src="https://media.tenor.com/6q7V5ioLF2QAAAAM/monster-level20-sparkles-my-singing-monsters.gif"
-            alt="User Avatar"
-          />
-        </IonAvatar>
+          <IonAvatar className="login-avatar">
+            <img
+              src="https://media.tenor.com/6q7V5ioLF2QAAAAM/monster-level20-sparkles-my-singing-monsters.gif"
+              alt="User Avatar"
+            />
+          </IonAvatar>
           <h1 style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'White' ,
-            font: 'cloister black' ,
+            color: 'White',
+            font: 'cloister black',
           }}>USER LOGIN</h1>
           <IonInput
             label="Email"
-            labelPlacement="floating" 
+            labelPlacement="floating"
             fill="outline"
             type="email"
             placeholder="Enter Email"
             value={email}
             onIonChange={e => setEmail(e.detail.value!)}
           />
-          <IonInput style={{ marginTop:'10px' }}      
+          <IonInput
+            style={{ marginTop: '10px' }}
             fill="outline"
             type="password"
             placeholder="Password"
             value={password}
             onIonChange={e => setPassword(e.detail.value!)}
           >
-            <IonInputPasswordToggle slot="end"></IonInputPasswordToggle>
+            <IonInputPasswordToggle slot="end" />
           </IonInput>
         </div>
-        <IonButton onClick={doLogin} expand="full" shape='round'>
+
+        {/* Visible ReCAPTCHA above Login button */}
+        <ReCAPTCHA
+          ref={recaptchaRef}
+          sitekey="6LfGqksrAAAAABJydC5ifxBhX8e8RyxyrryXPnXE" // Your actual site key here
+          onChange={onReCAPTCHAChange}
+        />
+
+        <IonButton onClick={handleLoginClick} expand="full" shape='round'>
           Login
         </IonButton>
 
@@ -227,10 +258,8 @@ const Login: React.FC = () => {
           Don't have an account? Register here
         </IonButton>
 
-        {/* Reusable AlertBox Component */}
         <AlertBox message={alertMessage} isOpen={showAlert} onClose={() => setShowAlert(false)} />
 
-        {/* IonToast for success message */}
         <IonToast
           isOpen={showToast}
           onDidDismiss={() => setShowToast(false)}
